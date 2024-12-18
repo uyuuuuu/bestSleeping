@@ -19,7 +19,7 @@ def index():
 def weather():
     BASE_URL = "http://api.openweathermap.org/data/2.5/forecast?"
     api_key = os.getenv("OPEN_WEATHER_API")
-    url = BASE_URL+"id={cityID}&APPID={key}".format(cityID="1857140", key=api_key)
+    url = BASE_URL+"id={cityID}&units=metric&APPID={key}".format(cityID="1857140", key=api_key)
 
     response = requests.get(url)
     api_data = response.json()
@@ -30,6 +30,7 @@ def weather():
         
         data = {
             "dt": dt_jst.strftime("%Y-%m-%d %H:%M:%S"),
+            "temp": entry["main"]["temp"],
             "temp_min": entry["main"]["temp_min"],
             "temp_max": entry["main"]["temp_max"],
             "weather": entry["weather"][0]["main"]
