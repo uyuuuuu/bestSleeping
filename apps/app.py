@@ -30,6 +30,7 @@ def weather():
         
         data = {
             "dt": dt_jst.strftime("%Y-%m-%d %H:%M:%S"),
+            "temp": entry["main"]["temp"],
             "temp_min": entry["main"]["temp_min"],
             "temp_max": entry["main"]["temp_max"],
             "weather": entry["weather"][0]["main"]
