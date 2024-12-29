@@ -65,16 +65,15 @@ def aircon():
 
 @app.route("/aircon", methods=["GET"])
 def calculate():
-    # クエリパラメータ
-    now_time = request.args.get('time')
-    now_outside = request.args.get('outside')
-
-    # 分計算
-    now_minute = int(now_time.split(":")[0]) * 60 + int(now_time.split(":")[1])
-
     # スプシデータの読み込み
     url = "https://script.google.com/macros/s/AKfycbx9w61Lk_vBTnsGXTGXUE97Pg2Jl5kdAr1xhledu914VZpMO8LfSG5UoqNBQPZtybzTxg/exec"
     response = requests.get(url)
+    # 最新データ
+    now_time = response.json()['time']
+    now_outside = response.json()['outside']
+    # 分計算
+    now_minute = int(now_time.split(":")[0]) * 60 + int(now_time.split(":")[1])
+
     sheet_data = response.json()['data']
     columns = sheet_data[0]  # カラム名
     data_values = sheet_data[1:]
@@ -141,6 +140,7 @@ def calculate():
     print(f"[demo]推奨エアコン設定温度 (°C) = {demo:.1f}")
 
     result = coef_outside_temp * float(now_outside) + coef_sleep_start * now_minute + intercept
+    print(f"推奨エアコン設定温度 (°C) = {coef_outside_temp:.2f} * 外気温 {now_outside:.2f}(°C) + {coef_sleep_start:.2f} * 睡眠開始時刻 {now_minute:.2f}(分) + {intercept:.2f}")
     print(f"推奨エアコン設定温度 (°C) = {result:.1f}")
 
     res = f"{result:.1f}"
