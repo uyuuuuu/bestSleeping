@@ -127,6 +127,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+bestsleeping-c5a295fbb32f.json
 
 # Spyder project settings
 .spyderproject
