@@ -125,6 +125,7 @@ def send_line(message):
         ]
     }
   response = requests.post(url, headers=headers, json=body)
+  print(response.text)
   if response.status_code == 200:
       return jsonify({"status": "success", "message": "Message sended successfully!"}), 200
   else:
