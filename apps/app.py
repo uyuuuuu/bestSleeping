@@ -113,7 +113,7 @@ def send_reply(reply_token, message):
   url = "https://api.line.me/v2/bot/message/reply"
   headers = {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer {channel access token}'  # チャネルアクセストークンを設定
+      'Authorization': f'Bearer {os.getenv("CHANNEL_ACCESS_TOKEN")}'  # チャネルアクセストークンを設定
   }
   body = {
       "replyToken": reply_token,
