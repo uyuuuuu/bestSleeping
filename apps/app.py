@@ -10,7 +10,14 @@ import numpy as np
 import pandas as pd
 import requests
 from dotenv import load_dotenv
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, abort, jsonify, render_template, request
+from linebot.v3 import WebhookHandler
+from linebot.v3.exceptions import InvalidSignatureError
+from linebot.v3.messaging import (ApiClient, Configuration, MessagingApi,
+                                  PostbackAction, PushMessageRequest,
+                                  ReplyMessageRequest, TextMessage)
+from linebot.v3.webhooks import (FollowEvent, MessageEvent, PostbackEvent,
+                                 TextMessageContent)
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
@@ -20,6 +27,52 @@ load_dotenv()
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
+###########################
+## ライン
+configuration = Configuration(access_token=os.getenv("CHANNEL_ACCESS_TOKEN"))
+handler = WebhookHandler(os.getenv("CHANNEL_SECRET"))
+
+@app.route("/callback", methods=['POST'])
+def callback():
+	# get X-Line-Signature header value
+	signature = request.headers['X-Line-Signature']
+
+	# get request body as text
+	body = request.get_data(as_text=True)
+	app.logger.info("Request body: " + body)
+
+	# handle webhook body
+	try:
+		handler.handle(body, signature)
+	except InvalidSignatureError:
+		app.logger.info("Invalid signature. Please check your channel access token/channel secret.")
+		abort(400)
+
+	return 'OK'
+
+# @handler.add(MessageEvent, message=TextMessageContent)
+# def handle_message(event):
+#   ## APIインスタンス化
+# 	with ApiClient(configuration) as api_client:
+# 		line_bot_api = MessagingApi(api_client)
+
+# 	## 受信メッセージの中身を取得
+# 	received_message = event.message.text
+#   try:
+#     setting = float(received_message)
+#     ## 返信メッセージ編集
+#     reply = f'本日の設定温度を{received_message}度として記録しました！'
+#   except ValueError:
+#     reply = '数値を入力してね！'
+
+
+#   line_bot_api.reply_message(ReplyMessageRequest(
+#     replyToken=event.reply_token,
+#     messages=[TextMessage(text=reply)]
+#   ))
+
+
+###########################
 @app.route("/")
 def index():
     return "Welcome to BestSleeping App!"
@@ -58,6 +111,7 @@ def weather():
 @app.route("/aircon/set", methods=["POST"])
 def aircon():
     json = request.get_json()
+    print(json)
     if type(json) == list:
         data = json[0]
     else:
@@ -213,15 +267,6 @@ def calculate():
         ac_temp = calculate_optimal_ac_temp(outside_temp, sleep_start_minutes)
         print(f"外気温: {outside_temp}℃, 睡眠開始: {sleep_start_minutes}分 → エアコン設定温度: {ac_temp}℃")
 
-    # 可視化: 室温 vs エアコン設定温度
-    plt.scatter(data["room_temp"], data["ac_setting_temp"], color="blue", label="データポイント")
-    plt.axvline(x=23, color="red", linestyle="--", label="目標")
-    plt.xlabel("室温 (°C)")
-    plt.ylabel("エアコン設定温度 (°C)")
-    plt.title("室温とエアコン設定温度の関係")
-    plt.legend()
-    plt.grid(True)
-    # plt.show() # [demo]
 
     # デモデータ
     demo = coef_outside_temp * 9.31 + coef_sleep_start * 1410 + intercept
