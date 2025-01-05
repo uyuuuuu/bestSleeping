@@ -58,12 +58,12 @@ def callback():
 
 # 	## 受信メッセージの中身を取得
 # 	received_message = event.message.text
-#   try:
-#     setting = float(received_message)
-#     ## 返信メッセージ編集
-#     reply = f'本日の設定温度を{received_message}度として記録しました！'
-#   except ValueError:
-#     reply = '数値を入力してね！'
+  # try:
+  #   setting = float(received_message)
+  #   ## 返信メッセージ編集
+  #   reply = f'本日の設定温度を{received_message}度として記録しました！'
+  # except ValueError:
+  #   reply = '数値を入力してね！'
 
 
 #   line_bot_api.reply_message(ReplyMessageRequest(
@@ -111,13 +111,28 @@ def weather():
 @app.route("/aircon/set", methods=["POST"])
 def aircon():
     json = request.get_json()
-    print(json)
-    if type(json) == list:
-        data = json[0]
+    print(json) #[debug]
+    responses = []
+    received_message = data['events'][0]['message']['text']
+    isSuccess = False
+    try:
+      if data['events'][0]['type'] != "text":
+        raise ValueError()
+      setting = float(received_message)
+
+      reply = f'本日の設定温度を{received_message}度として記録しました！'
+      isSuccess = True
+    except ValueError:
+      reply = f'数値を入力してください！'
+
+    responses.append(LineReplyMessage.make_text_response(reply))
+    reply_token = data['events'][0]['replyToken']
+    LineReplyMessage.send_reply(reply_token, responses)
+    print(reply)
+    if isSuccess:
+      return f'設定温度を{setting}度に設定しました'
     else:
-        data = json
-    #data["product"]
-    return "12/18の設定温度を24度に設定しました"
+      return "設定温度の記録に失敗しました"
 
 def img2html(fig):
     HTML_TMP = """
@@ -204,6 +219,27 @@ def plot():
     html = img2html(fig)
     plt.close(fig)  # メモリ解放
     return Response(html, mimetype="text/html")
+
+def line():
+  for event in body['events']:
+        responses = []
+
+        replyToken = event['replyToken']
+        type = event['type']
+        
+        if type == 'message':
+            message = event['message']
+            
+            if message['type'] == 'text':
+                # そのままオウム返し
+                responses.append(LineReplyMessage.make_text_response(message['text']))
+            else:
+                # テキスト以外のメッセージにはてへぺろしておく
+                responses.append(LineReplyMessage.make_text_response('てへぺろ'))
+
+        # 返信する
+        LineReplyMessage.send_reply(replyToken, responses)
+
 
 @app.route("/aircon", methods=["GET"])
 def calculate():
