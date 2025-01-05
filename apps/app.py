@@ -113,11 +113,11 @@ def aircon():
     json = request.get_json()
     print(json) #[debug]
     responses = []
-    received_message = data['events'][0]['message']['text']
+    received_message = json['events'][0]['message']['text']
     isSuccess = False
     try:
-      if data['events'][0]['type'] != "text":
-        raise ValueError()
+      if json['events'][0]['type'] != "text":
+        return "その他のイベント"
       setting = float(received_message)
 
       reply = f'本日の設定温度を{received_message}度として記録しました！'
@@ -126,7 +126,7 @@ def aircon():
       reply = f'数値を入力してください！'
 
     responses.append(LineReplyMessage.make_text_response(reply))
-    reply_token = data['events'][0]['replyToken']
+    reply_token = json['events'][0]['replyToken']
     LineReplyMessage.send_reply(reply_token, responses)
     print(reply)
     if isSuccess:
