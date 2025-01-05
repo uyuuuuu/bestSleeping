@@ -109,6 +109,27 @@ def weather():
     })
 
 
+def send_reply(token, message):
+  url = "https://api.line.me/v2/bot/message/reply"
+  headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer {channel access token}'  # チャネルアクセストークンを設定
+  }
+  body = {
+      "replyToken": reply_token,
+      "messages": [
+          {
+              "type": "text",
+              "text": message
+          }
+      ]
+  }
+  response = requests.post(url, headers=headers, json=body)
+  if response.status_code == 200:
+      return jsonify({"status": "success", "message": "Message replied successfully!"}), 200
+  else:
+      return jsonify({"status": "error", "message": response.text}), response.status_code
+
 @app.route("/aircon/set", methods=["POST"])
 def aircon():
     json = request.get_json()
@@ -140,9 +161,10 @@ def aircon():
 
     responses.append(LineReplyMessage.make_text_response(reply))
     reply_token = json['events'][0]['replyToken']
-    LineReplyMessage.send_reply(reply_token, responses)
+    # line送信
+    res = send_reply(reply_token, responses)
     print(reply)
-    if isSuccess:
+    if isSuccess and res[1] == 200:
       return f'設定温度を{setting}度に設定しました'
     else:
       return "設定温度の記録に失敗しました"
