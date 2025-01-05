@@ -108,6 +108,28 @@ def weather():
         "response": res_data
     })
 
+def send_line(message):
+  url = "https://api.line.me/v2/bot/message/push"
+
+  headers = {
+      'Content-Type': 'application/json',
+      'Authorization': f'Bearer {os.getenv("CHANNEL_ACCESS_TOKEN")}'  # チャネルアクセストークンを設定
+  }
+  body = {
+        "to": os.getenv("USER_ID"),
+        "messages": [
+            {
+                "type": "text",
+                "text": message
+            }
+        ]
+    }
+  response = requests.post(url, headers=headers, json=body)
+  if response.status_code == 200:
+      return jsonify({"status": "success", "message": "Message sended successfully!"}), 200
+  else:
+      return jsonify({"status": "error", "message": response.text}), response.status_code
+
 
 def send_reply(reply_token, message):
   url = "https://api.line.me/v2/bot/message/reply"
@@ -253,24 +275,6 @@ def plot():
     plt.close(fig)  # メモリ解放
     return Response(html, mimetype="text/html")
 
-def line():
-  for event in body['events']:
-        responses = []
-        replyToken = event['replyToken']
-        type = event['type']
-        if type == 'message':
-            message = event['message']
-            if message['type'] == 'text':
-                # そのままオウム返し
-                responses.append(LineReplyMessage.make_text_response(message['text']))
-            else:
-                # テキスト以外のメッセージにはてへぺろしておく
-                responses.append(LineReplyMessage.make_text_response('てへぺろ'))
-
-        # 返信する
-        LineReplyMessage.send_reply(replyToken, responses)
-
-
 @app.route("/aircon", methods=["GET"])
 def calculate():
     # スプシデータの読み込み
@@ -299,18 +303,14 @@ def calculate():
     # 特徴量と目的変数
     X = data[["outside_temp", "sleep_start_minutes"]].values  # 特徴量: 外気温と睡眠開始時刻
     y = data["ac_setting_temp"].values  # 目的変数: エアコン設定温度
-
     # データを訓練セットとテストセットに分割
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
     # 線形回帰モデルの訓練
     model = LinearRegression()
     model.fit(X_train, y_train)
-
     # 回帰係数と切片を取得
     coef_outside_temp, coef_sleep_start = model.coef_
     intercept = model.intercept_
-
     # 回帰式を表示
     print(f"エアコン設定温度 (°C) = {coef_outside_temp:.2f} * 外気温 (°C) + {coef_sleep_start:.2f} * 睡眠開始時刻 (分) + {intercept:.2f}")
 
@@ -341,9 +341,16 @@ def calculate():
     print(f"推奨エアコン設定温度 (°C) = {coef_outside_temp:.2f} * 外気温 {now_outside:.2f}(°C) + {coef_sleep_start:.2f} * 睡眠開始時刻 {now_minute:.2f}(分) + {intercept:.2f}")
     print(f"推奨エアコン設定温度 (°C) = {result:.1f}")
 
+    line_res = send_line(f'本日の推奨設定温度は{result:.1f}度です！')
     res = f"{result:.1f}"
-    return jsonify({
+    if line_res[1] == 200:
+      return jsonify({
         "message": "successfully get aircon setting temprature",
+        "response": res
+    })
+    else:
+      return jsonify({
+        "message": "failed get aircon setting temprature in line",
         "response": res
     })
 
