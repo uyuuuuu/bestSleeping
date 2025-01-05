@@ -237,13 +237,28 @@ def plot():
         ac_temp = calculate_optimal_ac_temp(outside_temp, sleep_start_minutes)
         print(f"外気温: {outside_temp}℃, 睡眠開始: {sleep_start_minutes}分 → エアコン設定温度: {ac_temp}℃")
 
-    # 可視化: 室温 vs エアコン設定温度
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.scatter(data["room_temp"], data["ac_setting_temp"], color="blue", label="データポイント")
-    ax.axvline(x=23, color="red", linestyle="--", label="目標")
-    ax.set_xlabel("室温 (°C)")
-    ax.set_ylabel("エアコン設定温度 (°C)")
-    ax.set_title("室温とエアコン設定温度の関係")
+
+    data["time"] = pd.to_datetime(data["time"], format="%H:%M:%S", errors="coerce")  # 不正なデータをNaTに変換
+    # 時刻を分に変換
+    data["time_minutes"] = data["time"].dt.hour * 60 + data["time"].dt.minute
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.scatter(data["time"], data["room_temp"]-data["outside_temp"], color="blue", label="データポイント")
+    min_time = data["time"].min()
+    max_time = data["time"].max()
+    # x軸の範囲に1時間(60分)のバッファを加える
+    ax.set_xlim(min_time - pd.Timedelta(hours=1), max_time + pd.Timedelta(hours=1))
+
+    # x軸ラベルと目盛り
+    ax.set_xlabel("時刻")
+    ax.set_ylabel("室温-外気温 (°C)")
+    ax.set_title("時刻と室温-外気温の関係")
+
+    # 15分刻みのラベルを表示
+    xticks = pd.date_range((min_time - pd.Timedelta(hours=1)).replace(second=0, microsecond=0), max_time + pd.Timedelta(hours=1), freq="15T")
+    ax.set_xticks(xticks)
+    ax.set_xticklabels([t.strftime("%H:%M") for t in xticks], rotation=45)
+
     ax.legend()
     ax.grid(True)
 
