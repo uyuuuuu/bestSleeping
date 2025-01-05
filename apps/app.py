@@ -27,6 +27,7 @@ load_dotenv()
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
+GAS_URL = "https://script.google.com/macros/s/AKfycbx9w61Lk_vBTnsGXTGXUE97Pg2Jl5kdAr1xhledu914VZpMO8LfSG5UoqNBQPZtybzTxg/exec"
 ###########################
 ## ライン
 configuration = Configuration(access_token=os.getenv("CHANNEL_ACCESS_TOKEN"))
@@ -119,6 +120,14 @@ def aircon():
       if json['events'][0]['type'] != "text":
         return "その他のイベント"
       setting = float(received_message)
+
+      # POSTリクエストを送る
+      body = {
+          "set": setting  # setting変数を送る
+      }
+      response = requests.post(GAS_URL, json=body)
+      if response.status_code != 200:
+          raise ValueError()
 
       reply = f'本日の設定温度を{received_message}度として記録しました！'
       isSuccess = True
@@ -223,13 +232,10 @@ def plot():
 def line():
   for event in body['events']:
         responses = []
-
         replyToken = event['replyToken']
         type = event['type']
-        
         if type == 'message':
             message = event['message']
-            
             if message['type'] == 'text':
                 # そのままオウム返し
                 responses.append(LineReplyMessage.make_text_response(message['text']))
@@ -244,8 +250,7 @@ def line():
 @app.route("/aircon", methods=["GET"])
 def calculate():
     # スプシデータの読み込み
-    url = "https://script.google.com/macros/s/AKfycbx9w61Lk_vBTnsGXTGXUE97Pg2Jl5kdAr1xhledu914VZpMO8LfSG5UoqNBQPZtybzTxg/exec"
-    response = requests.get(url)
+    response = requests.get(GAS_URL)
     # 最新データ
     now_time = response.json()['time']
     now_outside = response.json()['outside']
