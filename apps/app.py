@@ -10,7 +10,14 @@ import numpy as np
 import pandas as pd
 import requests
 from dotenv import load_dotenv
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, abort, jsonify, render_template, request
+from linebot.v3 import WebhookHandler
+from linebot.v3.exceptions import InvalidSignatureError
+from linebot.v3.messaging import (ApiClient, Configuration, MessagingApi,
+                                  PostbackAction, PushMessageRequest,
+                                  ReplyMessageRequest, TextMessage)
+from linebot.v3.webhooks import (FollowEvent, MessageEvent, PostbackEvent,
+                                 TextMessageContent)
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
@@ -20,10 +27,81 @@ load_dotenv()
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
+GAS_URL = "https://script.google.com/macros/s/AKfycbx9w61Lk_vBTnsGXTGXUE97Pg2Jl5kdAr1xhledu914VZpMO8LfSG5UoqNBQPZtybzTxg/exec"
+
+###########################
+## ライン
+configuration = Configuration(access_token=os.getenv("CHANNEL_ACCESS_TOKEN"))
+handler = WebhookHandler(os.getenv("CHANNEL_SECRET"))
+
+@app.route("/callback", methods=['POST'])
+def callback():
+	# get X-Line-Signature header value
+	signature = request.headers['X-Line-Signature']
+
+	# get request body as text
+	body = request.get_data(as_text=True)
+	app.logger.info("Request body: " + body)
+
+	# handle webhook body
+	try:
+		handler.handle(body, signature)
+	except InvalidSignatureError:
+		app.logger.info("Invalid signature. Please check your channel access token/channel secret.")
+		abort(400)
+
+	return 'OK'
+
+def send_line(message):
+  url = "https://api.line.me/v2/bot/message/push"
+
+  headers = {
+      'Content-Type': 'application/json',
+      'Authorization': f'Bearer {os.getenv("CHANNEL_ACCESS_TOKEN")}'  # チャネルアクセストークンを設定
+  }
+  body = {
+        "to": os.getenv("USER_ID"),
+        "messages": [
+            {
+                "type": "text",
+                "text": message
+            }
+        ]
+    }
+  response = requests.post(url, headers=headers, json=body)
+  print(response.text)
+  if response.status_code == 200:
+      return jsonify({"status": "success", "message": "Message sended successfully!"}), 200
+  else:
+      return jsonify({"status": "error", "message": response.text}), response.status_code
+
+
+def send_reply(reply_token, message):
+  url = "https://api.line.me/v2/bot/message/reply"
+  headers = {
+      'Content-Type': 'application/json',
+      'Authorization': f'Bearer {os.getenv("CHANNEL_ACCESS_TOKEN")}'  # チャネルアクセストークンを設定
+  }
+  body = {
+      "replyToken": reply_token,
+      "messages": [
+          {
+              "type": "text",
+              "text": message
+          }
+      ]
+  }
+  response = requests.post(url, headers=headers, json=body)
+  if response.status_code == 200:
+      return jsonify({"status": "success", "message": "Message replied successfully!"}), 200
+  else:
+      return jsonify({"status": "error", "message": response.text}), response.status_code
+
+###########################
+
 @app.route("/")
 def index():
     return "Welcome to BestSleeping App!"
-
 
 @app.route("/weather", methods=["GET"])
 def weather():
@@ -54,16 +132,42 @@ def weather():
         "response": res_data
     })
 
-
 @app.route("/aircon/set", methods=["POST"])
 def aircon():
     json = request.get_json()
-    if type(json) == list:
-        data = json[0]
+    print(json) #[debug]
+    received_message = json['events'][0]['message']['text']
+    isSuccess = False
+    try:
+      if json['events'][0]['type'] != "message":
+        return "その他のイベント"
+      elif json['events'][0]['message']['type'] != "text":
+        raise ValueError()
+      setting = float(received_message)
+      print(setting)
+      # POSTリクエストを送る
+      body = {
+          "set": setting  # setting変数を送る
+      }
+      response = requests.post(GAS_URL, json=body)
+      print(response.status_code)
+      if response.status_code != 200:
+          raise ValueError()
+
+      reply = f'本日の設定温度を{received_message}度として記録しました！'
+      isSuccess = True
+    except ValueError:
+      print("error!!!!!")
+      reply = f'数値を入力してください！'
+
+    reply_token = json['events'][0]['replyToken']
+    # line送信
+    res = send_reply(reply_token, reply)
+    print(reply)
+    if isSuccess and res[1] == 200:
+      return f'設定温度を{setting}度に設定しました'
     else:
-        data = json
-    #data["product"]
-    return "12/18の設定温度を24度に設定しました"
+      return "設定温度の記録に失敗しました"
 
 def img2html(fig):
     HTML_TMP = """
@@ -154,8 +258,7 @@ def plot():
 @app.route("/aircon", methods=["GET"])
 def calculate():
     # スプシデータの読み込み
-    url = "https://script.google.com/macros/s/AKfycbx9w61Lk_vBTnsGXTGXUE97Pg2Jl5kdAr1xhledu914VZpMO8LfSG5UoqNBQPZtybzTxg/exec"
-    response = requests.get(url)
+    response = requests.get(GAS_URL)
     # 最新データ
     now_time = response.json()['time']
     now_outside = response.json()['outside']
@@ -180,18 +283,14 @@ def calculate():
     # 特徴量と目的変数
     X = data[["outside_temp", "sleep_start_minutes"]].values  # 特徴量: 外気温と睡眠開始時刻
     y = data["ac_setting_temp"].values  # 目的変数: エアコン設定温度
-
     # データを訓練セットとテストセットに分割
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
     # 線形回帰モデルの訓練
     model = LinearRegression()
     model.fit(X_train, y_train)
-
     # 回帰係数と切片を取得
     coef_outside_temp, coef_sleep_start = model.coef_
     intercept = model.intercept_
-
     # 回帰式を表示
     print(f"エアコン設定温度 (°C) = {coef_outside_temp:.2f} * 外気温 (°C) + {coef_sleep_start:.2f} * 睡眠開始時刻 (分) + {intercept:.2f}")
 
@@ -213,15 +312,6 @@ def calculate():
         ac_temp = calculate_optimal_ac_temp(outside_temp, sleep_start_minutes)
         print(f"外気温: {outside_temp}℃, 睡眠開始: {sleep_start_minutes}分 → エアコン設定温度: {ac_temp}℃")
 
-    # 可視化: 室温 vs エアコン設定温度
-    plt.scatter(data["room_temp"], data["ac_setting_temp"], color="blue", label="データポイント")
-    plt.axvline(x=23, color="red", linestyle="--", label="目標")
-    plt.xlabel("室温 (°C)")
-    plt.ylabel("エアコン設定温度 (°C)")
-    plt.title("室温とエアコン設定温度の関係")
-    plt.legend()
-    plt.grid(True)
-    # plt.show() # [demo]
 
     # デモデータ
     demo = coef_outside_temp * 9.31 + coef_sleep_start * 1410 + intercept
@@ -231,9 +321,16 @@ def calculate():
     print(f"推奨エアコン設定温度 (°C) = {coef_outside_temp:.2f} * 外気温 {now_outside:.2f}(°C) + {coef_sleep_start:.2f} * 睡眠開始時刻 {now_minute:.2f}(分) + {intercept:.2f}")
     print(f"推奨エアコン設定温度 (°C) = {result:.1f}")
 
+    line_res = send_line(f'本日の推奨設定温度は{result:.1f}度です！')
     res = f"{result:.1f}"
-    return jsonify({
+    if line_res[1] == 200:
+      return jsonify({
         "message": "successfully get aircon setting temprature",
+        "response": res
+    })
+    else:
+      return jsonify({
+        "message": "failed get aircon setting temprature in line",
         "response": res
     })
 
