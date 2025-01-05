@@ -117,7 +117,7 @@ def aircon():
     received_message = json['events'][0]['message']['text']
     isSuccess = False
     try:
-      if json['events'][0]['type'] != "text":
+      if json['events'][0]['type'] != "message" || json['events'][0]['message']['type'] != "text":
         return "その他のイベント"
       setting = float(received_message)
       print(setting)
