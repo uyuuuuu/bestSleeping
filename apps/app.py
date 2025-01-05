@@ -120,18 +120,20 @@ def aircon():
       if json['events'][0]['type'] != "text":
         return "その他のイベント"
       setting = float(received_message)
-
+      print(setting)
       # POSTリクエストを送る
       body = {
           "set": setting  # setting変数を送る
       }
       response = requests.post(GAS_URL, json=body)
+      print(response.status_code)
       if response.status_code != 200:
           raise ValueError()
 
       reply = f'本日の設定温度を{received_message}度として記録しました！'
       isSuccess = True
     except ValueError:
+      print("error!!!!!")
       reply = f'数値を入力してください！'
 
     responses.append(LineReplyMessage.make_text_response(reply))
