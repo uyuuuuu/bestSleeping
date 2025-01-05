@@ -28,6 +28,7 @@ app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
 GAS_URL = "https://script.google.com/macros/s/AKfycbx9w61Lk_vBTnsGXTGXUE97Pg2Jl5kdAr1xhledu914VZpMO8LfSG5UoqNBQPZtybzTxg/exec"
+
 ###########################
 ## ライン
 configuration = Configuration(access_token=os.getenv("CHANNEL_ACCESS_TOKEN"))
@@ -50,63 +51,6 @@ def callback():
 		abort(400)
 
 	return 'OK'
-
-# @handler.add(MessageEvent, message=TextMessageContent)
-# def handle_message(event):
-#   ## APIインスタンス化
-# 	with ApiClient(configuration) as api_client:
-# 		line_bot_api = MessagingApi(api_client)
-
-# 	## 受信メッセージの中身を取得
-# 	received_message = event.message.text
-  # try:
-  #   setting = float(received_message)
-  #   ## 返信メッセージ編集
-  #   reply = f'本日の設定温度を{received_message}度として記録しました！'
-  # except ValueError:
-  #   reply = '数値を入力してね！'
-
-
-#   line_bot_api.reply_message(ReplyMessageRequest(
-#     replyToken=event.reply_token,
-#     messages=[TextMessage(text=reply)]
-#   ))
-
-
-###########################
-@app.route("/")
-def index():
-    return "Welcome to BestSleeping App!"
-
-
-@app.route("/weather", methods=["GET"])
-def weather():
-    BASE_URL = "http://api.openweathermap.org/data/2.5/forecast?"
-    api_key = os.getenv("OPEN_WEATHER_API")
-    url = BASE_URL+"id={cityID}&units=metric&APPID={key}".format(cityID="1857140", key=api_key)
-
-    response = requests.get(url)
-    api_data = response.json()
-    res_data = []
-    for entry in api_data["list"][:4]:  # 上から4件に限定
-        # unix to jpt
-        dt_jst = datetime.fromtimestamp(entry["dt"], tz=timezone.utc) + timedelta(hours=9)
-        
-        data = {
-            "dt": dt_jst.strftime("%Y-%m-%d %H:%M:%S"),
-            "temp": entry["main"]["temp"],
-            "temp_min": entry["main"]["temp_min"],
-            "temp_max": entry["main"]["temp_max"],
-            "weather": entry["weather"][0]["main"]
-        }
-        res_data.append(data)
-
-    print(json.dumps(res_data, indent=4))
-
-    return jsonify({
-        "message": "successfully get weather",
-        "response": res_data
-    })
 
 def send_line(message):
   url = "https://api.line.me/v2/bot/message/push"
@@ -152,6 +96,41 @@ def send_reply(reply_token, message):
       return jsonify({"status": "success", "message": "Message replied successfully!"}), 200
   else:
       return jsonify({"status": "error", "message": response.text}), response.status_code
+
+###########################
+
+@app.route("/")
+def index():
+    return "Welcome to BestSleeping App!"
+
+@app.route("/weather", methods=["GET"])
+def weather():
+    BASE_URL = "http://api.openweathermap.org/data/2.5/forecast?"
+    api_key = os.getenv("OPEN_WEATHER_API")
+    url = BASE_URL+"id={cityID}&units=metric&APPID={key}".format(cityID="1857140", key=api_key)
+
+    response = requests.get(url)
+    api_data = response.json()
+    res_data = []
+    for entry in api_data["list"][:4]:  # 上から4件に限定
+        # unix to jpt
+        dt_jst = datetime.fromtimestamp(entry["dt"], tz=timezone.utc) + timedelta(hours=9)
+        
+        data = {
+            "dt": dt_jst.strftime("%Y-%m-%d %H:%M:%S"),
+            "temp": entry["main"]["temp"],
+            "temp_min": entry["main"]["temp_min"],
+            "temp_max": entry["main"]["temp_max"],
+            "weather": entry["weather"][0]["main"]
+        }
+        res_data.append(data)
+
+    print(json.dumps(res_data, indent=4))
+
+    return jsonify({
+        "message": "successfully get weather",
+        "response": res_data
+    })
 
 @app.route("/aircon/set", methods=["POST"])
 def aircon():
