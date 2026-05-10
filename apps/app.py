@@ -27,7 +27,7 @@ load_dotenv()
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
-GAS_URL = os.getenv("GAS_URL")
+GAS_URL = "https://script.google.com/macros/s/AKfycbx9w61Lk_vBTnsGXTGXUE97Pg2Jl5kdAr1xhledu914VZpMO8LfSG5UoqNBQPZtybzTxg/exec"
 
 ###########################
 # ライン
@@ -194,51 +194,86 @@ def img2html(fig):
 
 @app.route("/plot")
 def plot():
+    # スプシデータの読み込み
     file_path = "./data/sleepingData.csv"
     data = pd.read_csv(file_path)
     data.columns = ["date", "time", "outside_temp", "room_temp", "ac_setting_temp"]
 
+    # 睡眠開始時刻を分に変換
     data["sleep_start_minutes"] = data["time"].apply(
         lambda t: int(t.split(":")[0]) * 60 + int(t.split(":")[1])
     )
 
-    X = data[["outside_temp", "room_temp", "sleep_start_minutes"]].values
-    y = data["ac_setting_temp"].values
+    # 室温を目標範囲（22~24℃）に正規化
+    target_temp = 23
+    data["temp_deviation"] = data["room_temp"] - target_temp
 
+    # 特徴量と目的変数
+    X = data[["outside_temp", "sleep_start_minutes"]].values  # 特徴量: 外気温と睡眠開始時刻
+    y = data["ac_setting_temp"].values  # 目的変数: エアコン設定温度
+
+    # データを訓練セットとテストセットに分割
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
+    # 線形回帰モデルの訓練
     model = LinearRegression()
     model.fit(X_train, y_train)
 
-    coef_outside_temp, coef_room_temp, coef_sleep_start = model.coef_
+    # 回帰係数と切片を取得
+    coef_outside_temp, coef_sleep_start = model.coef_
     intercept = model.intercept_
 
+    # 回帰式を表示
+    print(f"エアコン設定温度 (°C) = {coef_outside_temp:.2f} * 外気温 (°C) + {coef_sleep_start:.2f} * 睡眠開始時刻 (分) + {intercept:.2f}")
+
+    # 室温が目標範囲（22～24℃）に収まるかチェック
+    def calculate_optimal_ac_temp(outside_temp, sleep_start_minutes):
+        # エアコン設定温度を計算
+        ac_temp = coef_outside_temp * outside_temp + coef_sleep_start * sleep_start_minutes + intercept
+        return round(ac_temp, 2)
+
+    # テストデータで予測
     predicted_ac_temp = model.predict(X_test)
     mse = mean_squared_error(y_test, predicted_ac_temp)
     print(f"平均二乗誤差 (MSE): {mse:.2f}")
 
-    # 外気温レンジ全体で「目標室温23℃を達成するためのAC設定温度」を計算
-    target_room_temp = 23.0
-    median_sleep_start = data["sleep_start_minutes"].median()
-    outside_range = np.linspace(data["outside_temp"].min(), data["outside_temp"].max(), 100)
-    predicted_line = (
-        coef_outside_temp * outside_range
-        + coef_room_temp * target_room_temp
-        + coef_sleep_start * median_sleep_start
-        + intercept
-    )
+    # 最適なエアコン設定温度を計算
+    for i in range(5):  # テスト用: 5つのデータを例示
+        outside_temp = X_test[i, 0]
+        sleep_start_minutes = X_test[i, 1]
+        ac_temp = calculate_optimal_ac_temp(outside_temp, sleep_start_minutes)
+        print(f"外気温: {outside_temp}℃, 睡眠開始: {sleep_start_minutes}分 → エアコン設定温度: {ac_temp}℃")
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.scatter(data["outside_temp"], data["ac_setting_temp"], color="blue", alpha=0.6, label="実績データ")
-    ax.plot(outside_range, predicted_line, color="red", linewidth=2, label=f"推奨AC設定（目標室温 {target_room_temp}℃）")
-    ax.set_xlabel("外気温 (°C)")
-    ax.set_ylabel("エアコン設定温度 (°C)")
-    ax.set_title("外気温と最適エアコン設定温度の関係\n（部屋の特性から導出）")
+    data["time"] = pd.to_datetime(data["time"], format="%H:%M:%S", errors="coerce")  # 不正なデータをNaTに変換
+    # 時刻を分に変換
+    data["time_minutes"] = data["time"].dt.hour * 60 + data["time"].dt.minute
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.scatter(data["time"], data["room_temp"] - data["outside_temp"], color="blue", label="データポイント")
+    min_time = data["time"].min()
+    max_time = data["time"].max()
+    # x軸の範囲に1時間(60分)のバッファを加える
+    ax.set_xlim(min_time - pd.Timedelta(hours=1), max_time + pd.Timedelta(hours=1))
+
+    # x軸ラベルと目盛り
+    ax.set_xlabel("時刻")
+    ax.set_ylabel("室温-外気温 (°C)")
+    ax.set_title("時刻と室温-外気温の関係")
+
+    # 15分刻みのラベルを表示
+    xticks = pd.date_range((min_time - pd.Timedelta(hours=1)).replace(second=0, microsecond=0), max_time + pd.Timedelta(hours=1), freq="15T")
+    ax.set_xticks(xticks)
+    ax.set_xticklabels([t.strftime("%H:%M") for t in xticks], rotation=45)
+
     ax.legend()
     ax.grid(True)
 
+    # デモデータ
+    demo = coef_outside_temp * 9.31 + coef_sleep_start * 1410 + intercept
+    print(f"[demo]推奨エアコン設定温度 (°C) = {demo:.1f}")
+
     html = img2html(fig)
-    plt.close(fig)
+    plt.close(fig)  # メモリ解放
     return Response(html, mimetype="text/html")
 
 
@@ -248,7 +283,7 @@ def calculate():
     response = requests.get(GAS_URL)
     # 最新データ
     now_time = response.json()['time']
-    now_outside = float(response.json()['outside'])
+    now_outside = response.json()['outside']
     # 分計算
     now_minute = int(now_time.split(":")[0]) * 60 + int(now_time.split(":")[1])
 
@@ -263,32 +298,48 @@ def calculate():
         lambda t: int(t.split(":")[0]) * 60 + int(t.split(":")[1])
     )
 
+    # 室温を目標範囲（22~24℃）に正規化
+    target_temp = 23
+    data["temp_deviation"] = data["room_temp"] - target_temp
+
     # 特徴量と目的変数
-    X = data[["outside_temp", "room_temp", "sleep_start_minutes"]].astype(float).values
-    y = data["ac_setting_temp"].astype(float).values
+    X = data[["outside_temp", "sleep_start_minutes"]].values  # 特徴量: 外気温と睡眠開始時刻
+    y = data["ac_setting_temp"].values  # 目的変数: エアコン設定温度
     # データを訓練セットとテストセットに分割
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     # 線形回帰モデルの訓練
     model = LinearRegression()
     model.fit(X_train, y_train)
     # 回帰係数と切片を取得
-    coef_outside_temp, coef_room_temp, coef_sleep_start = model.coef_
+    coef_outside_temp, coef_sleep_start = model.coef_
     intercept = model.intercept_
-    print(f"エアコン設定温度 (°C) = {coef_outside_temp:.2f} * 外気温 (°C) + {coef_room_temp:.2f} * 室温 (°C) + {coef_sleep_start:.2f} * 睡眠開始時刻 (分) + {intercept:.2f}")
+    # 回帰式を表示
+    print(f"エアコン設定温度 (°C) = {coef_outside_temp:.2f} * 外気温 (°C) + {coef_sleep_start:.2f} * 睡眠開始時刻 (分) + {intercept:.2f}")
 
+    # 室温が目標範囲（22～24℃）に収まるかチェック
+    def calculate_optimal_ac_temp(outside_temp, sleep_start_minutes):
+        # エアコン設定温度を計算
+        ac_temp = coef_outside_temp * outside_temp + coef_sleep_start * sleep_start_minutes + intercept
+        return round(ac_temp, 2)
+
+    # テストデータで予測
     predicted_ac_temp = model.predict(X_test)
     mse = mean_squared_error(y_test, predicted_ac_temp)
     print(f"平均二乗誤差 (MSE): {mse:.2f}")
 
-    # 目標室温23℃を達成するためのAC設定温度を計算
-    target_room_temp = 23.0
-    result = (
-        coef_outside_temp * now_outside
-        + coef_room_temp * target_room_temp
-        + coef_sleep_start * now_minute
-        + intercept
-    )
-    print(f"推奨エアコン設定温度 (°C) = {coef_outside_temp:.2f} * 外気温 {now_outside:.2f}(°C) + {coef_room_temp:.2f} * 目標室温 {target_room_temp}(°C) + {coef_sleep_start:.2f} * 睡眠開始時刻 {now_minute}(分) + {intercept:.2f}")
+    # 最適なエアコン設定温度を計算
+    for i in range(5):  # テスト用: 5つのデータを例示
+        outside_temp = X_test[i, 0]
+        sleep_start_minutes = X_test[i, 1]
+        ac_temp = calculate_optimal_ac_temp(outside_temp, sleep_start_minutes)
+        print(f"外気温: {outside_temp}℃, 睡眠開始: {sleep_start_minutes}分 → エアコン設定温度: {ac_temp}℃")
+
+    # デモデータ
+    demo = coef_outside_temp * 9.31 + coef_sleep_start * 1410 + intercept
+    print(f"[demo]推奨エアコン設定温度 (°C) = {demo:.1f}")
+
+    result = coef_outside_temp * float(now_outside) + coef_sleep_start * now_minute + intercept
+    print(f"推奨エアコン設定温度 (°C) = {coef_outside_temp:.2f} * 外気温 {now_outside:.2f}(°C) + {coef_sleep_start:.2f} * 睡眠開始時刻 {now_minute:.2f}(分) + {intercept:.2f}")
     print(f"推奨エアコン設定温度 (°C) = {result:.1f}")
 
     line_res = send_line(f'本日の推奨設定温度は{result:.1f}度です！')
