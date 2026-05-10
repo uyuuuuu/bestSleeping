@@ -202,7 +202,7 @@ def plot():
     data["temp_deviation"] = data["room_temp"] - target_temp
 
     # 特徴量と目的変数
-    X = data[["outside_temp", "sleep_start_minutes"]].values  # 特徴量: 外気温と睡眠開始時刻
+    X = data[["outside_temp", "room_temp", "sleep_start_minutes"]].values  # 特徴量: 外気温と睡眠開始時刻
     y = data["ac_setting_temp"].values  # 目的変数: エアコン設定温度
 
     # データを訓練セットとテストセットに分割
@@ -296,7 +296,7 @@ def calculate():
     data["temp_deviation"] = data["room_temp"] - target_temp
 
     # 特徴量と目的変数
-    X = data[["outside_temp", "sleep_start_minutes"]].values  # 特徴量: 外気温と睡眠開始時刻
+    X = data[["outside_temp", "room_temp", "sleep_start_minutes"]].values  # 特徴量: 外気温と室温と睡眠開始時刻
     y = data["ac_setting_temp"].values  # 目的変数: エアコン設定温度
     # データを訓練セットとテストセットに分割
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
